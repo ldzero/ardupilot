@@ -2,7 +2,7 @@
 
 // Code to integrate AC_Fence library with main ArduCopter code
 
-#if AC_FENCE == ENABLED
+#if AP_FENCE_ENABLED
 
 // fence_check - ask fence library to check for breaches and initiate the response
 // called at 1hz
@@ -22,6 +22,10 @@ void Copter::fence_check()
 
     // if there is a new breach take action
     if (new_breaches) {
+
+        if (!copter.ap.land_complete) {
+            GCS_SEND_TEXT(MAV_SEVERITY_NOTICE, "Fence Breached");
+        }
 
         // if the user wants some kind of response and motors are armed
         uint8_t fence_act = fence.get_action();
@@ -61,6 +65,12 @@ void Copter::fence_check()
                     case AC_FENCE_ACTION_BRAKE:
                         // Try Brake, if that fails Land
                         if (!set_mode(Mode::Number::BRAKE, ModeReason::FENCE_BREACHED)) {
+                            set_mode(Mode::Number::LAND, ModeReason::FENCE_BREACHED);
+                        }
+                        break;
+                    case AC_FENCE_ACTION_SMART_RTL_OR_LAND:
+                        // Try SmartRTL, if that fails, Land
+                        if (!set_mode(Mode::Number::SMART_RTL, ModeReason::FENCE_BREACHED)) {
                             set_mode(Mode::Number::LAND, ModeReason::FENCE_BREACHED);
                         }
                         break;

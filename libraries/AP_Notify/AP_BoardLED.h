@@ -15,7 +15,7 @@
 #pragma once
 
 #include <AP_Common/AP_Common.h>
-#include <AP_HAL/AP_HAL.h>
+#include <AP_HAL/AP_HAL_Boards.h>
 
 #include "NotifyDevice.h"
 
@@ -29,6 +29,9 @@ public:
     void update(void) override;
 
 private:
+#if (defined(HAL_GPIO_A_LED_PIN) && defined(HAL_GPIO_B_LED_PIN) && \
+     defined(HAL_GPIO_C_LED_PIN))
     // counter incremented at 50Hz
     uint8_t _counter;
+#endif
 };

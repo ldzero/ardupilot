@@ -29,7 +29,17 @@
 
 // when using flash storage we use a small line size to make storage
 // compact and minimise the number of erase cycles needed
+#ifdef STORAGE_FLASH_PAGE
+#if defined(STM32H7XX)
+#define CH_STORAGE_LINE_SHIFT 4
+#else
 #define CH_STORAGE_LINE_SHIFT 3
+#endif
+#elif defined(USE_POSIX) && !defined(HAL_WITH_RAMTRON)
+#define CH_STORAGE_LINE_SHIFT 9
+#else
+#define CH_STORAGE_LINE_SHIFT 3
+#endif
 
 #define CH_STORAGE_LINE_SIZE (1<<CH_STORAGE_LINE_SHIFT)
 #define CH_STORAGE_NUM_LINES (CH_STORAGE_SIZE/CH_STORAGE_LINE_SIZE)
@@ -46,6 +56,7 @@ public:
 
     void _timer_tick(void) override;
     bool healthy(void) override;
+    bool get_storage_ptr(void *&ptr, size_t &size) override;
 
 private:
     enum class StorageBackend: uint8_t {
@@ -61,6 +72,8 @@ private:
     void _mark_dirty(uint16_t loc, uint16_t length);
     uint8_t _buffer[CH_STORAGE_SIZE] __attribute__((aligned(4)));
     Bitmask<CH_STORAGE_NUM_LINES> _dirty_mask;
+    HAL_Semaphore sem;
+    uint8_t tmpline[CH_STORAGE_LINE_SIZE];
 
     bool _flash_write_data(uint8_t sector, uint32_t offset, const uint8_t *data, uint16_t length);
     bool _flash_read_data(uint8_t sector, uint32_t offset, uint8_t *data, uint16_t length);
@@ -81,7 +94,7 @@ private:
 #endif
 
     void _flash_load(void);
-    void _flash_write(uint16_t line);
+    bool _flash_write(uint16_t line);
 
 #if HAL_WITH_RAMTRON
     AP_RAMTRON fram;

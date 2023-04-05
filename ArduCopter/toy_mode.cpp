@@ -216,7 +216,7 @@ void ToyMode::update()
             
     // set ALT_HOLD as indoors for the EKF (disables GPS vertical velocity fusion)
 #if 0
-    copter.ahrs.set_indoor_mode(copter.control_mode == ALT_HOLD || copter.control_mode == FLOWHOLD);
+    copter.ahrs.set_indoor_mode(copter.flightmode->mode_number() == ALT_HOLD || copter.flightmode->mode_number() == FLOWHOLD);
 #endif
     
     bool left_button = false;
@@ -424,13 +424,13 @@ void ToyMode::update()
         if (throttle_high_counter >= TOY_LAND_ARM_COUNT) {
             gcs().send_text(MAV_SEVERITY_INFO, "Tmode: throttle arm");
             arm_check_compass();
-            if (!copter.arming.arm(AP_Arming::Method::MAVLINK) && (flags & FLAG_UPGRADE_LOITER) && copter.control_mode == Mode::Number::LOITER) {
+            if (!copter.arming.arm(AP_Arming::Method::MAVLINK) && (flags & FLAG_UPGRADE_LOITER) && copter.flightmode->mode_number() == Mode::Number::LOITER) {
                 /*
                   support auto-switching to ALT_HOLD, then upgrade to LOITER once GPS available
                  */
                 if (set_and_remember_mode(Mode::Number::ALT_HOLD, ModeReason::TOY_MODE)) {
                     gcs().send_text(MAV_SEVERITY_INFO, "Tmode: ALT_HOLD update arm");
-#if AC_FENCE == ENABLED
+#if AP_FENCE_ENABLED
                     copter.fence.enable(false);
 #endif
                     if (!copter.arming.arm(AP_Arming::Method::MAVLINK)) {
@@ -453,25 +453,25 @@ void ToyMode::update()
     }
 
     if (upgrade_to_loiter) {
-        if (!copter.motors->armed() || copter.control_mode != Mode::Number::ALT_HOLD) {
+        if (!copter.motors->armed() || copter.flightmode->mode_number() != Mode::Number::ALT_HOLD) {
             upgrade_to_loiter = false;
 #if 0
             AP_Notify::flags.hybrid_loiter = false;
 #endif
         } else if (copter.position_ok() && set_and_remember_mode(Mode::Number::LOITER, ModeReason::TOY_MODE)) {
-#if AC_FENCE == ENABLED
+#if AP_FENCE_ENABLED
             copter.fence.enable(true);
 #endif
             gcs().send_text(MAV_SEVERITY_INFO, "Tmode: LOITER update");            
         }
     }
 
-    if (copter.control_mode == Mode::Number::RTL && (flags & FLAG_RTL_CANCEL) && throttle_near_max) {
+    if (copter.flightmode->mode_number() == Mode::Number::RTL && (flags & FLAG_RTL_CANCEL) && throttle_near_max) {
         gcs().send_text(MAV_SEVERITY_INFO, "Tmode: RTL cancel");        
         set_and_remember_mode(Mode::Number::LOITER, ModeReason::TOY_MODE);
     }
     
-    enum Mode::Number old_mode = copter.control_mode;
+    enum Mode::Number old_mode = copter.flightmode->mode_number();
     enum Mode::Number new_mode = old_mode;
 
     /*
@@ -579,11 +579,11 @@ void ToyMode::update()
         break;
 
     case ACTION_TOGGLE_SIMPLE:
-        copter.set_simple_mode(copter.ap.simple_mode?0:1);
+        copter.set_simple_mode(bool(copter.simple_mode)?Copter::SimpleMode::NONE:Copter::SimpleMode::SIMPLE);
         break;
 
     case ACTION_TOGGLE_SSIMPLE:
-        copter.set_simple_mode(copter.ap.simple_mode?0:2);
+        copter.set_simple_mode(bool(copter.simple_mode)?Copter::SimpleMode::NONE:Copter::SimpleMode::SUPERSIMPLE);
         break;
         
     case ACTION_ARM_LAND_RTL:
@@ -622,7 +622,7 @@ void ToyMode::update()
             copter.set_mode(Mode::Number::ALT_HOLD, ModeReason::TOY_MODE);
         } else {
             copter.set_mode(Mode::Number::ALT_HOLD, ModeReason::TOY_MODE);
-#if AC_FENCE == ENABLED
+#if AP_FENCE_ENABLED
             copter.fence.enable(false);
 #endif
             if (copter.arming.arm(AP_Arming::Method::MAVLINK)) {
@@ -636,20 +636,20 @@ void ToyMode::update()
         break;
     }
 
-    if (!copter.motors->armed() && (copter.control_mode == Mode::Number::LAND || copter.control_mode == Mode::Number::RTL)) {
+    if (!copter.motors->armed() && (copter.flightmode->mode_number() == Mode::Number::LAND || copter.flightmode->mode_number() == Mode::Number::RTL)) {
         // revert back to last primary flight mode if disarmed after landing
         new_mode = Mode::Number(primary_mode[last_mode_choice].get());
     }
     
-    if (new_mode != copter.control_mode) {
+    if (new_mode != copter.flightmode->mode_number()) {
         load_test.running = false;
-#if AC_FENCE == ENABLED
+#if AP_FENCE_ENABLED
         copter.fence.enable(false);
 #endif
         if (set_and_remember_mode(new_mode, ModeReason::TOY_MODE)) {
             gcs().send_text(MAV_SEVERITY_INFO, "Tmode: mode %s", copter.flightmode->name4());
             // force fence on in all GPS flight modes
-#if AC_FENCE == ENABLED
+#if AP_FENCE_ENABLED
             if (copter.flightmode->requires_GPS()) {
                 copter.fence.enable(true);
             }
@@ -660,7 +660,7 @@ void ToyMode::update()
                 // if we can't RTL then land
                 gcs().send_text(MAV_SEVERITY_ERROR, "Tmode: LANDING");
                 set_and_remember_mode(Mode::Number::LAND, ModeReason::TOY_MODE);
-#if AC_FENCE == ENABLED
+#if AP_FENCE_ENABLED
                 if (copter.landing_with_GPS()) {
                     copter.fence.enable(true);
                 }
@@ -676,7 +676,7 @@ void ToyMode::update()
  */
 bool ToyMode::set_and_remember_mode(Mode::Number mode, ModeReason reason)
 {
-    if (copter.control_mode == mode) {
+    if (copter.flightmode->mode_number() == mode) {
         return true;
     }
     if (!copter.set_mode(mode, reason)) {
@@ -799,7 +799,7 @@ void ToyMode::action_arm(void)
     arm_check_compass();
     
     if (needs_gps && copter.arming.gps_checks(false)) {
-#if AC_FENCE == ENABLED
+#if AP_FENCE_ENABLED
         // we want GPS and checks are passing, arm and enable fence
         copter.fence.enable(true);
 #endif
@@ -815,7 +815,7 @@ void ToyMode::action_arm(void)
         AP_Notify::events.arming_failed = true;
         gcs().send_text(MAV_SEVERITY_ERROR, "Tmode: GPS arming failed");
     } else {
-#if AC_FENCE == ENABLED
+#if AP_FENCE_ENABLED
         // non-GPS mode
         copter.fence.enable(false);
 #endif
@@ -846,7 +846,7 @@ void ToyMode::throttle_adjust(float &throttle_control)
     }
 
     // limit descent rate close to the ground
-    float height = copter.inertial_nav.get_altitude() * 0.01 - copter.arming_altitude_m;
+    float height = copter.inertial_nav.get_position_z_up_cm() * 0.01 - copter.arming_altitude_m;
     if (throttle_control < 500 &&
         height < TOY_DESCENT_SLOW_HEIGHT + TOY_DESCENT_SLOW_RAMP &&
         copter.motors->armed() && !copter.ap.land_complete) {
@@ -1002,7 +1002,7 @@ void ToyMode::thrust_limiting(float *thrust, uint8_t num_motors)
 // @Field: M4: Motor 4 pwm output
 
     if (motor_log_counter++ % 10 == 0) {
-        AP::logger().Write("THST", "TimeUS,Vol,Mul,M1,M2,M3,M4", "QffHHHH",
+        AP::logger().WriteStreaming("THST", "TimeUS,Vol,Mul,M1,M2,M3,M4", "QffHHHH",
                                                AP_HAL::micros64(),
                                                (double)filtered_voltage,
                                                (double)thrust_mul,

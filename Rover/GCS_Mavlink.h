@@ -18,10 +18,9 @@ protected:
     MAV_RESULT _handle_command_preflight_calibration(const mavlink_command_long_t &packet) override;
     MAV_RESULT handle_command_int_packet(const mavlink_command_int_t &packet) override;
     MAV_RESULT handle_command_long_packet(const mavlink_command_long_t &packet) override;
+    MAV_RESULT handle_command_int_do_reposition(const mavlink_command_int_t &packet);
 
     void send_position_target_global_int() override;
-
-    virtual bool in_hil_mode() const override;
 
     bool persist_streamrates() const override { return true; }
 
@@ -36,9 +35,16 @@ private:
 
     void handleMessage(const mavlink_message_t &msg) override;
     bool handle_guided_request(AP_Mission::Mission_Command &cmd) override;
-    void handle_change_alt_request(AP_Mission::Mission_Command &cmd) override;
-    void handle_rc_channels_override(const mavlink_message_t &msg) override;
     bool try_send_message(enum ap_message id) override;
+
+    void handle_manual_control_axes(const mavlink_manual_control_t &packet, const uint32_t tnow) override;
+    void handle_set_attitude_target(const mavlink_message_t &msg);
+    void handle_set_position_target_local_ned(const mavlink_message_t &msg);
+    void handle_set_position_target_global_int(const mavlink_message_t &msg);
+    void handle_radio(const mavlink_message_t &msg);
+    void handle_landing_target(const mavlink_landing_target_t &msg, uint32_t timestamp_ms) override;
+
+    void send_servo_out();
 
     void packetReceived(const mavlink_status_t &status, const mavlink_message_t &msg) override;
 
@@ -49,4 +55,11 @@ private:
 
     void send_rangefinder() const override;
 
+#if HAL_HIGH_LATENCY2_ENABLED
+    uint8_t high_latency_tgt_heading() const override;
+    uint16_t high_latency_tgt_dist() const override;
+    uint8_t high_latency_tgt_airspeed() const override;
+    uint8_t high_latency_wind_speed() const override;
+    uint8_t high_latency_wind_direction() const override;
+#endif // HAL_HIGH_LATENCY2_ENABLED
 };

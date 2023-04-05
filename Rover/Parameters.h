@@ -3,9 +3,20 @@
 #include <AP_Common/AP_Common.h>
 
 #include "RC_Channel.h"
+#include <AC_Avoidance/AC_Avoid.h>
 #include "AC_Sprayer/AC_Sprayer.h"
+#include <AP_AIS/AP_AIS.h>
+#include <AP_Beacon/AP_Beacon.h>
+#include <AP_Follow/AP_Follow.h>
 #include "AP_Gripper/AP_Gripper.h"
+#include <AP_Proximity/AP_Proximity.h>
 #include "AP_Rally.h"
+#include <AP_SmartRTL/AP_SmartRTL.h>
+#include <AP_Stats/AP_Stats.h>
+#include "AP_Torqeedo/AP_Torqeedo.h"
+#include <AP_WindVane/AP_WindVane.h>
+
+#define AP_PARAM_VEHICLE_NAME rover
 
 // Global parameter class.
 //
@@ -26,7 +37,7 @@ public:
         //
         k_param_format_version = 0,
         k_param_software_type, // unused
-        k_param_BoardConfig_CAN,
+        k_param_can_mgr,
 
         // Misc
         //
@@ -45,6 +56,8 @@ public:
         k_param_rssi_pin = 20,  // unused, replaced by rssi_ library parameters
         k_param_battery_volt_pin,
         k_param_battery_curr_pin,
+
+        k_param_precland = 24,
 
         // braking
         k_param_braking_percent_old = 30,   // unused
@@ -81,6 +94,9 @@ public:
         k_param_cli_enabled_old,    // unused
         k_param_gcs3,
         k_param_gcs_pid_mask,
+        k_param_gcs4,
+        k_param_gcs5,
+        k_param_gcs6,
 
         //
         // 130: Sensor parameters
@@ -114,7 +130,7 @@ public:
         k_param_auto_trigger_pin,
         k_param_auto_kickstart,
         k_param_turn_circle,  // unused
-        k_param_turn_max_g,
+        k_param_turn_max_g_old, // unused
 
         //
         // 160: Radio settings
@@ -202,12 +218,13 @@ public:
         k_param_ins,
         k_param_compass,
         k_param_rcmap,
-        k_param_L1_controller,
+        k_param_L1_controller,          // unused
         k_param_steerController_old,    // unused
         k_param_barometer,
         k_param_notify,
         k_param_button,
         k_param_osd,
+        k_param_optflow,
 
         k_param_logger = 253,  // Logging Group
 
@@ -236,7 +253,6 @@ public:
     AP_Int8     ch7_option;
     AP_Int8     auto_trigger_pin;
     AP_Float    auto_kickstart;
-    AP_Float    turn_max_g;
     AP_Int16    gcs_pid_mask;
 
     // Throttle
@@ -323,11 +339,15 @@ public:
     // frame class for vehicle
     AP_Int8 frame_class;
 
-    // fence library
-    AC_Fence fence;
-
+#if HAL_PROXIMITY_ENABLED
     // proximity library
     AP_Proximity proximity;
+#endif
+
+#if MODE_DOCK_ENABLED == ENABLED
+    // we need a pointer to the mode for the G2 table
+    class ModeDock *mode_dock_ptr;
+#endif
 
     // avoidance library
     AC_Avoid avoid;
@@ -353,7 +373,7 @@ public:
     AC_Sprayer sprayer;
 #endif
 
-#if GRIPPER_ENABLED
+#if AP_GRIPPER_ENABLED
     AP_Gripper gripper;
 #endif
 
@@ -366,9 +386,6 @@ public:
     // windvane
     AP_WindVane windvane;
 
-    // Airspeed
-    AP_Airspeed airspeed;
-
     // mission behave
     AP_Int8 mis_done_behave;
 
@@ -378,12 +395,12 @@ public:
     // stick mixing for auto modes
     AP_Int8     stick_mixing;
 
-#ifdef ENABLE_SCRIPTING
+#if AP_SCRIPTING_ENABLED
     AP_Scripting scripting;
-#endif // ENABLE_SCRIPTING
+#endif // AP_SCRIPTING_ENABLED
 
     // waypoint navigation
-    AR_WPNav wp_nav;
+    AR_WPNav_OA wp_nav;
 
     // Sailboat functions
     Sailboat sailboat;
@@ -399,6 +416,23 @@ public:
 
     // FS options
     AP_Int32 fs_options;
+
+#if HAL_TORQEEDO_ENABLED
+    // torqeedo motor driver
+    AP_Torqeedo torqeedo;
+#endif
+
+    // position controller
+    AR_PosControl pos_control;
+
+    // guided options bitmask
+    AP_Int32 guided_options;
+
+    // manual mode options
+    AP_Int32 manual_options;
+
+    // manual mode steering expo
+    AP_Float manual_steering_expo;
 };
 
 extern const AP_Param::Info var_info[];

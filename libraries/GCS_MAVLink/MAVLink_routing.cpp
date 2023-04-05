@@ -97,7 +97,8 @@ bool MAVLink_routing::check_and_forward(mavlink_channel_t in_channel, const mavl
         return true;
     }
 
-    // learn new routes
+    // learn new routes including private channels
+    // so that find_mav_type works for all channels
     learn_route(in_channel, msg);
 
     if (msg.msgid == MAVLINK_MSG_ID_RADIO ||
@@ -105,10 +106,14 @@ bool MAVLink_routing::check_and_forward(mavlink_channel_t in_channel, const mavl
         // don't forward RADIO packets
         return true;
     }
-    
+
+    const bool from_private_channel = GCS_MAVLINK::is_private(in_channel);
+
     if (msg.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
         // heartbeat needs special handling
-        handle_heartbeat(in_channel, msg);
+        if (!from_private_channel) {
+            handle_heartbeat(in_channel, msg);
+        }
         return true;
     }
 
@@ -129,6 +134,11 @@ bool MAVLink_routing::check_and_forward(mavlink_channel_t in_channel, const mavl
                                             (target_component == mavlink_system.compid));
     bool process_locally = match_system && match_component;
 
+    // don't ever forward data from a private channel
+    if (from_private_channel) {
+        return process_locally;
+    }
+
     if (process_locally && !broadcast_system && !broadcast_component) {
         // nothing more to do - it can only be for us
         return true;
@@ -139,7 +149,7 @@ bool MAVLink_routing::check_and_forward(mavlink_channel_t in_channel, const mavl
     bool sent_to_chan[MAVLINK_COMM_NUM_BUFFERS];
     memset(sent_to_chan, 0, sizeof(sent_to_chan));
     for (uint8_t i=0; i<num_routes; i++) {
-    
+
         // Skip if channel is private and the target system or component IDs do not match
         if ((GCS_MAVLINK::is_private(routes[i].channel)) &&
             (target_system != routes[i].sysid ||
@@ -172,7 +182,8 @@ bool MAVLink_routing::check_and_forward(mavlink_channel_t in_channel, const mavl
         }
     }
 
-    if (!forwarded && match_system) {
+    if ((!forwarded && match_system) ||
+        broadcast_system) {
         process_locally = true;
     }
 
@@ -256,14 +267,41 @@ bool MAVLink_routing::find_by_mavtype(uint8_t mavtype, uint8_t &sysid, uint8_t &
 }
 
 /*
+  search for the first vehicle or component in the routing table with given mav_type and component id and retrieve its sysid and channel
+  returns true if a match is found
+ */
+bool MAVLink_routing::find_by_mavtype_and_compid(uint8_t mavtype, uint8_t compid, uint8_t &sysid, mavlink_channel_t &channel) const
+{
+    for (uint8_t i=0; i<num_routes; i++) {
+        if ((routes[i].mavtype == mavtype) && (routes[i].compid == compid)) {
+            sysid = routes[i].sysid;
+            channel = routes[i].channel;
+            return true;
+        }
+    }
+    return false;
+}
+
+/*
   see if the message is for a new route and learn it
 */
 void MAVLink_routing::learn_route(mavlink_channel_t in_channel, const mavlink_message_t &msg)
 {
     uint8_t i;
-    if (msg.sysid == 0 ||
-        (msg.sysid == mavlink_system.sysid &&
-         msg.compid == mavlink_system.compid)) {
+    if (msg.sysid == 0) {
+        // don't learn routes to the broadcast system
+        return;
+    }
+    if (msg.sysid == mavlink_system.sysid &&
+        msg.compid == mavlink_system.compid) {
+        // don't learn routes to ourself.  We know where we are.
+        return;
+    }
+    if (msg.sysid == mavlink_system.sysid &&
+        msg.compid == MAV_COMP_ID_ALL) {
+        // don't learn routes to the broadcast component ID for our
+        // own system id.  We should still broadcast these, but we
+        // should also process them locally.
         return;
     }
     for (i=0; i<num_routes; i++) {
@@ -301,8 +339,8 @@ void MAVLink_routing::learn_route(mavlink_channel_t in_channel, const mavlink_me
 */
 void MAVLink_routing::handle_heartbeat(mavlink_channel_t in_channel, const mavlink_message_t &msg)
 {
-    uint16_t mask = GCS_MAVLINK::active_channel_mask();
-    
+    uint16_t mask = GCS_MAVLINK::active_channel_mask() & ~GCS_MAVLINK::private_channel_mask();
+
     // don't send on the incoming channel. This should only matter if
     // the routing table is full
     mask &= ~(1U<<(in_channel-MAVLINK_COMM_0));

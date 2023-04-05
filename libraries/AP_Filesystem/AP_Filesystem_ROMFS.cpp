@@ -15,15 +15,18 @@
 /*
   ArduPilot filesystem interface for ROMFS
  */
+
+#include "AP_Filesystem_config.h"
+
+#if AP_FILESYSTEM_ROMFS_ENABLED
+
 #include "AP_Filesystem.h"
 #include "AP_Filesystem_ROMFS.h"
 #include <AP_HAL/AP_HAL.h>
 #include <AP_Math/AP_Math.h>
 #include <AP_ROMFS/AP_ROMFS.h>
 
-#if defined(HAL_HAVE_AP_ROMFS_EMBEDDED_H)
-
-int AP_Filesystem_ROMFS::open(const char *fname, int flags)
+int AP_Filesystem_ROMFS::open(const char *fname, int flags, bool allow_absolute_paths)
 {
     if ((flags & O_ACCMODE) != O_RDONLY) {
         errno = EROFS;
@@ -97,7 +100,11 @@ int32_t AP_Filesystem_ROMFS::lseek(int fd, int32_t offset, int seek_from)
     }
     switch (seek_from) {
     case SEEK_SET:
-        file[fd].ofs = MIN(file[fd].size, offset);
+        if (offset < 0) {
+            errno = EINVAL;
+            return -1;
+        }
+        file[fd].ofs = MIN(file[fd].size, (uint32_t)offset);
         break;
     case SEEK_CUR:
         file[fd].ofs = MIN(file[fd].size, offset+file[fd].ofs);
@@ -208,4 +215,28 @@ bool AP_Filesystem_ROMFS::set_mtime(const char *filename, const uint32_t mtime_s
     return false;
 }
 
-#endif // HAL_HAVE_AP_ROMFS_EMBEDDED_H
+/*
+  load a full file. Use delete to free the data
+  we override this in ROMFS to avoid taking twice the memory
+*/
+FileData *AP_Filesystem_ROMFS::load_file(const char *filename)
+{
+    FileData *fd = new FileData(this);
+    if (!fd) {
+        return nullptr;
+    }
+    fd->data = AP_ROMFS::find_decompress(filename, fd->length);
+    if (fd->data == nullptr) {
+        delete fd;
+        return nullptr;
+    }
+    return fd;
+}
+
+// unload data from load_file()
+void AP_Filesystem_ROMFS::unload_file(FileData *fd)
+{
+    AP_ROMFS::free(fd->data);
+}
+
+#endif // AP_FILESYSTEM_ROMFS_ENABLED

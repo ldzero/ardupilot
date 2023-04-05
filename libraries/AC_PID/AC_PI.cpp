@@ -25,14 +25,13 @@ const AP_Param::GroupInfo AC_PI::var_info[] = {
 };
 
 // Constructor
-AC_PI::AC_PI(float initial_p, float initial_i, float initial_imax)
+AC_PI::AC_PI(float initial_p, float initial_i, float initial_imax) :
+    default_kp(initial_p),
+    default_ki(initial_i),
+    default_imax(initial_imax)
 {
     // load parameter values from eeprom
     AP_Param::setup_object_defaults(this, var_info);
-
-    kP.set(initial_p);
-    kI.set(initial_i);
-    imax.set(initial_imax);
 }
 
 float AC_PI::update(float measurement, float target, float dt)

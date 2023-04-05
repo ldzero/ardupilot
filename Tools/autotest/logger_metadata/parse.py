@@ -12,6 +12,8 @@ import emit_html
 import emit_rst
 import emit_xml
 
+import enum_parse
+
 topdir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '../../../')
 topdir = os.path.realpath(topdir)
 
@@ -22,6 +24,8 @@ re_url = re.compile(r"\s*//\s*@URL\s*:\s*(.*)")
 re_field = re.compile(r"\s*//\s*@Field\s*:\s*(\w+):\s*(.*)")
 re_fieldbits = re.compile(r"\s*//\s*@FieldBits\s*:\s*(\w+):\s*(.*)")
 re_fieldbits = re.compile(r"\s*//\s*@FieldBits\s*:\s*(\w+):\s*(.*)")
+re_fieldbitmaskenum = re.compile(r"\s*//\s*@FieldBitmaskEnum\s*:\s*(\w+):\s*(.*)")
+re_fieldvalueenum = re.compile(r"\s*//\s*@FieldValueEnum\s*:\s*(\w+):\s*(.*)")
 re_vehicles = re.compile(r"\s*//\s*@Vehicles\s*:\s*(.*)")
 
 # TODO: validate URLS actually return 200
@@ -36,6 +40,7 @@ class LoggerDocco(object):
         "Copter": "ArduCopter",
         "Plane": "ArduPlane",
         "Tracker": "AntennaTracker",
+        "Blimp": "Blimp",
     }
 
     def __init__(self, vehicle):
@@ -69,6 +74,9 @@ class LoggerDocco(object):
                 self.fields_order.append(field)
 
         def set_field_description(self, field, description):
+            if field in self.fields:
+                raise ValueError("Already have field %s in %s" %
+                                 (field, self.name))
             self.ensure_field(field)
             self.fields[field]["description"] = description
 
@@ -76,12 +84,21 @@ class LoggerDocco(object):
             self.ensure_field(field)
             self.fields[field]["bits"] = bits
 
+        def set_fieldbitmaskenum(self, field, bits):
+            self.ensure_field(field)
+            self.fields[field]["bitmaskenum"] = bits
+
+        def set_fieldbitmaskvalue(self, field, bits):
+            self.ensure_field(field)
+            self.fields[field]["valueenum"] = bits
+
         def set_vehicles(self, vehicles):
             self.vehicles = vehicles
 
     def search_for_files(self, dirs_to_search):
         _next = []
         for _dir in dirs_to_search:
+            _dir = os.path.join(topdir, _dir)
             for entry in os.listdir(_dir):
                 filepath = os.path.join(_dir, entry)
                 if os.path.isdir(filepath):
@@ -135,6 +152,14 @@ class LoggerDocco(object):
                 if m is not None:
                     docco.set_field_bits(m.group(1), m.group(2))
                     continue
+                m = re_fieldbitmaskenum.match(line)
+                if m is not None:
+                    docco.set_fieldbitmaskenum(m.group(1), m.group(2))
+                    continue
+                m = re_fieldvalueenum.match(line)
+                if m is not None:
+                    docco.set_fieldbitmaskvalue(m.group(1), m.group(2))
+                    continue
                 m = re_vehicles.match(line)
                 if m is not None:
                     docco.set_vehicles([x.strip() for x in m.group(1).split(',')])
@@ -159,10 +184,14 @@ class LoggerDocco(object):
                 new_doccos.append(docco)
         new_doccos = sorted(new_doccos, key=lambda x : x.name)
 
+        enums_by_name = {}
+        for enum in self.enumerations:
+            enums_by_name[enum.name] = enum
         for emitter in self.emitters:
-            emitter.emit(new_doccos)
+            emitter.emit(new_doccos, enums_by_name)
 
     def run(self):
+        self.enumerations = enum_parse.EnumDocco(self.vehicle).get_enumerations()
         self.files = []
         self.search_for_files([self.vehicle_map[self.vehicle], "libraries"])
         self.parse_files()

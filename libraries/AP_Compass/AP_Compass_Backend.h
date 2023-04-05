@@ -19,7 +19,17 @@
  */
 #pragma once
 
-#include "AP_Compass.h"
+#include "AP_Compass_config.h"
+
+#if AP_COMPASS_EXTERNALAHRS_ENABLED
+#include <AP_ExternalAHRS/AP_ExternalAHRS.h>
+#endif
+
+#if AP_COMPASS_MSP_ENABLED
+#include <AP_MSP/msp.h>
+#endif
+
+#include <AP_Math/AP_Math.h>
 
 class Compass;  // forward declaration
 class AP_Compass_Backend
@@ -58,11 +68,21 @@ public:
         DEVTYPE_MAG3110  = 0x0E,
         DEVTYPE_SITL  = 0x0F,
         DEVTYPE_IST8308 = 0x10,
-        DEVTYPE_RM3100_OLD = 0x11,
-        DEVTYPE_RM3100 = 0x12,
+        DEVTYPE_RM3100 = 0x11,
+        DEVTYPE_RM3100_2 = 0x12, // unused, past mistake
+        DEVTYPE_MMC5983 = 0x13,
+        DEVTYPE_AK09918 = 0x14,
+        DEVTYPE_AK09915 = 0x15,
     };
 
+#if AP_COMPASS_MSP_ENABLED
+    virtual void handle_msp(const MSP::msp_compass_data_message_t &pkt) {}
+#endif
 
+#if AP_COMPASS_EXTERNALAHRS_ENABLED
+    virtual void handle_external(const AP_ExternalAHRS::mag_data_message_t &pkt) {}
+#endif
+    
 protected:
 
     /*
